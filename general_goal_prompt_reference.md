@@ -16,11 +16,11 @@ Use attachments for detailed requirements, scenarios, logs, screenshots, example
 - **Proof boundary:** source inspection, local test, integration test, UI proof, staging/prod evidence, external-provider evidence, or human review. Never claim beyond the strongest available proof.
 - **Run:** one bounded goal execution: one package, bounded commits, one push, one broad verification, one terminal state.
 - **AI-complete horizon:** the subset of scenarios whose verification mode is automated or locally automatable. The done-check is computed over this subset only.
-- **Terminal state:** the declared end of a run. All terminal states are successful completions, including stopping because the remainder is human-owned.
+- **Terminal state:** the declared end of a run. DONE and AI_COMPLETE are completion states; BLOCKED_STOP is a clean stop when progress requires access, a decision, or another human-owned gate.
 
 ## Why v6
 
-v5 stopped micro-slicing and made evidence evaluator-visible. In practice it still allowed one expensive failure mode: on a slice whose remaining items were all human-gated, a goal runner that re-checks completion every cycle kept finding defensible evidence-hardening work — hours of guard/tighten/harden commits that moved no scenario verdict, each paying the full verification cost (observed: a ~9h run, 55 commits, ~47 of them verdict-neutral). v6 closes this with terminal states (AI_COMPLETE is success), a hard run budget, a commit admission rule, and idempotent re-evaluation, so repeated goal checks converge instead of spawning work.
+v5 stopped micro-slicing and made evidence evaluator-visible. In practice it still allowed one expensive failure mode: on a slice whose remaining items were all human-gated, a goal runner that re-checks completion every cycle kept finding defensible evidence-hardening work — hours of guard/tighten/harden commits that moved no scenario verdict, each paying the full verification cost (observed: a ~9h run, 55 commits, ~47 of them verdict-neutral). v6 closes this with terminal states (AI_COMPLETE is a completion state; BLOCKED_STOP is a clean stop), a hard run budget, a commit admission rule, and idempotent re-evaluation, so repeated goal checks converge instead of spawning work.
 
 ## Reusable Goal Prompt v6
 
@@ -30,15 +30,15 @@ v5 stopped micro-slicing and made evidence evaluator-visible. In practice it sti
 Achieve the current slice described in our conversation and attached references. Treat the attached scenario/implementation document as the source of truth.
 
 Done means:
-- every in-scope work package is implemented or explicitly classified as done, later_slice, human_required, blocked, or out_of_scope
-- every applicable MUST_PASS and REGRESSION scenario has an individual pass/fail/partial/blocked/human_required verdict with scenario-specific evidence
+- every in-scope work package is implemented or explicitly classified as DONE, LATER_SLICE, HUMAN_REQUIRED, BLOCKED, or OUT_OF_SCOPE
+- every applicable MUST_PASS and REGRESSION scenario has an individual PASS/FAIL/PARTIAL/BLOCKED/HUMAN_REQUIRED verdict with scenario-specific evidence
 - the broadest available regression/check surface has run once at the final gate, cross-package interactions have been reviewed, and one adversarial evidence pass is complete
 - no completion, readiness, deployment, security, external-provider, or acceptance claim exceeds the available proof boundary
 
-Terminal states — each ends the run successfully:
+Terminal states — each is a terminal run exit:
 - DONE: all required scenarios pass.
-- AI_COMPLETE: every remaining required item is human_required, external_environment, blocked, later_slice, or out_of_scope. This is success, not failure.
-- BLOCKED_STOP: missing access, unresolved decision, unfit package contract, or an irreversible/human decision is required.
+- AI_COMPLETE: every remaining required item is HUMAN_REQUIRED, EXTERNAL_ENVIRONMENT, BLOCKED, LATER_SLICE, or OUT_OF_SCOPE. This is a completion state because more agent work cannot close the remaining gates.
+- BLOCKED_STOP: missing access, unresolved decision, unfit package contract, or an irreversible/human decision is required. This is a clean stop, not a completion state.
 On any terminal state: emit the handoff report — verdict table plus every remaining blocker with owner and exact next human action — and stop. The done-check counts only scenarios inside the AI-complete horizon; human/external scenarios are satisfied by an explicit gate entry, never by additional agent work.
 
 Run budget — hard limits:
@@ -83,7 +83,7 @@ If a new evaluation cycle finds repository and gate state unchanged since the la
 These rules exist because an unbounded goal on a partially human-gated slice degenerates into an infinite improvement loop: there is always a weakest claim to harden.
 
 - A run is a bounded transaction: one package, bounded commits, one push, one broad verification, one terminal state.
-- Evidence sufficiency: one scenario-specific pointer per scenario. Additional evidence for a passed scenario has zero value; producing it is a defect, not diligence.
+- Evidence sufficiency: one qualifying scenario-specific pointer, or the minimum evidence set defined by the scenario/verification class, is sufficient. Additional evidence beyond that threshold has zero value; producing it is a defect, not diligence.
 - The adversarial pass is a gate, not a loop. It runs once, at the final gate, and only verdict-changing findings are acted on.
 - When the goal objective is broader than the slice (e.g., a multi-phase migration), the run terminates on the slice's terminal state, never on the objective's completion.
 - Terminal states are sticky: unchanged state produces the same report and no work.

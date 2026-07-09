@@ -40,6 +40,10 @@ Use only these execution statuses for checks actually run:
 
 `PASS`, `FAIL`, `NOT_RUN`, `BLOCKED`, `NOT_APPLICABLE`.
 
+Use only these remainder classifications for work that is intentionally outside the current AI-complete horizon:
+
+`LATER_SLICE`, `OUT_OF_SCOPE`.
+
 Rules:
 
 - Base factual claims only on supplied material or explicitly verified evidence.
@@ -54,7 +58,7 @@ Focus detail on behavior that materially affects value, correctness, safety, com
 
 ### Evidence sufficiency
 
-One scenario-specific pointer proves a scenario. Do not design scenarios, guard checks, or evidence artifacts whose only purpose is to strengthen evidence for something already provable — every scenario must trace to a requirement, invariant, risk, or failure mode. Meta-scenarios that verify documentation hygiene or evidence formatting are out of scope unless a stakeholder explicitly requires them.
+A scenario is proven by one qualifying scenario-specific pointer, or by the minimum evidence set defined by the scenario/verification class when the behavior crosses multiple required boundaries. Do not design scenarios, guard checks, or evidence artifacts whose only purpose is to strengthen evidence beyond that sufficiency threshold — every scenario must trace to a requirement, invariant, risk, or failure mode. Meta-scenarios that verify documentation hygiene or evidence formatting are out of scope unless a stakeholder explicitly requires them.
 
 ---
 
@@ -197,13 +201,13 @@ Completion rules:
 - The verdict must not be stronger than the weakest applicable required scenario or unresolved gate.
 - Separate document readiness from implementation readiness.
 
-Terminal states for downstream goal runs — all three end a run successfully:
+Terminal states for downstream goal runs — all three are terminal run exits:
 
 - `DONE`: every required scenario passes.
-- `AI_COMPLETE`: every remaining required item is `HUMAN_REQUIRED`, `EXTERNAL_ENVIRONMENT`, `BLOCKED`, later_slice, or out_of_scope. Explicitly gated items are terminal for agents; more agent work cannot and must not substitute for the gate.
-- `BLOCKED_STOP`: missing access, unresolved decision, or an irreversible action is required.
+- `AI_COMPLETE`: every remaining required item is `HUMAN_REQUIRED`, `EXTERNAL_ENVIRONMENT`, `BLOCKED`, `LATER_SLICE`, or `OUT_OF_SCOPE`. This is a completion state because explicitly gated or out-of-scope items are terminal for agents; more agent work cannot and must not substitute for the gate.
+- `BLOCKED_STOP`: missing access, unresolved decision, or an irreversible action is required. This is a clean stop, not a completion state.
 
-Evidence sufficiency applies at run time too: once a scenario has one qualifying evidence pointer, further evidence work on it is forbidden.
+Evidence sufficiency applies at run time too: once a scenario has its qualifying evidence pointer or minimum evidence set, further evidence work on it is forbidden.
 
 ---
 
@@ -228,7 +232,7 @@ Verification classes/checks:
 Evaluator-visible evidence required:
 Run budget: (default: 1 work package, ≤3 commits, 1 push per run; broadest checks exactly once, at the final gate; targeted checks during iteration)
 Convergence rules: (commits must move a scenario verdict or reduce a blocker count; never re-open passed scenarios; two iterations with no verdict change -> stop)
-Terminal states: DONE | AI_COMPLETE | BLOCKED_STOP (all are successful ends; emit handoff report and stop)
+Terminal states: DONE | AI_COMPLETE | BLOCKED_STOP (all are terminal exits; DONE/AI_COMPLETE are completion states; BLOCKED_STOP is a clean stop; emit handoff report and stop)
 Final verdict rule:
 ```
 
