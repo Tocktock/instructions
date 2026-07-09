@@ -1,12 +1,13 @@
-# Prompt: Goal-Ready Architecture and Test-Scenario Implementation Document v7
+# Prompt: Goal-Ready Architecture and Test-Scenario Implementation Document v8
 
 Use the supplied conversation, documents, decisions, and explicitly verified evidence to create a compact, evidence-grounded implementation document that can be used directly with Codex or Claude `/goal` workflows.
 
-The document must do three things well:
+The document must do four things well:
 
 1. Explain the minimum architecture and rationale needed to understand why the solution should work.
 2. Convert requirements, risks, and failure modes into verifiable acceptance scenarios.
 3. Produce a compact **Goal Execution Brief** that a downstream agent can follow without micro-slicing.
+4. Bound downstream execution so goal runs converge: declare the AI-complete horizon, run budget, and terminal states. A downstream run must be able to end successfully even when human-gated items remain open.
 
 This is a reasoning framework, not a form. Adapt terminology, depth, and verification to the actual problem. Omit irrelevant sections and avoid repeating facts across sections.
 
@@ -20,8 +21,8 @@ Author in one forward pass with one consolidation review at the end.
 2. **Frame once:** write the problem, root causes, architecture model, and requirement set in a single pass.
 3. **Design scenarios as a set:** create the scenario index first. It is the coverage contract. Add detailed narratives only for scenarios that are high-risk, cross-boundary, disputed, irreversible, or otherwise hard to verify.
 4. **Plan in work packages:** group scenarios by coherent execution and verification surface, not by smallest steps.
-5. **Write the Goal Execution Brief:** summarize outcome, scope, package plan, verification surfaces, stop conditions, and evaluator-visible evidence requirements.
-6. **Consolidate once:** challenge package boundaries, missing scenarios, evidence strength, ID integrity, vocabulary consistency, and final verdict strength.
+5. **Write the Goal Execution Brief:** summarize outcome, scope, package plan, verification surfaces, AI-complete horizon, run budget, convergence and stop conditions, terminal states, and evaluator-visible evidence requirements.
+6. **Consolidate once:** challenge package boundaries, missing scenarios, evidence strength, ID integrity, vocabulary consistency, horizon correctness, and final verdict strength.
 
 Ownership rule: state each fact once in the section that owns it and reference by ID elsewhere.
 
@@ -50,6 +51,10 @@ Rules:
 ### Proportionality
 
 Focus detail on behavior that materially affects value, correctness, safety, compatibility, operability, or delivery risk. Consolidate related requirements and scenarios when separation would create repetition. The index carries breadth; narratives carry depth.
+
+### Evidence sufficiency
+
+One scenario-specific pointer proves a scenario. Do not design scenarios, guard checks, or evidence artifacts whose only purpose is to strengthen evidence for something already provable — every scenario must trace to a requirement, invariant, risk, or failure mode. Meta-scenarios that verify documentation hygiene or evidence formatting are out of scope unless a stakeholder explicitly requires them.
 
 ---
 
@@ -103,12 +108,16 @@ Keep separate:
 - **Verification mode:** `AUTOMATED`, `HUMAN_REQUIRED`, `EXTERNAL_ENVIRONMENT`, or combined.
 - **Current evidence status:** a claim label from §1.
 
+### AI-complete horizon
+
+The scenarios whose verification mode is `AUTOMATED` (or locally automatable) form the **AI-complete horizon**. Downstream goal runs compute their done-check over this subset only. Every `HUMAN_REQUIRED` or `EXTERNAL_ENVIRONMENT` scenario must name an owner and the exact next action; such scenarios are closed by their owners, never compensated for by additional agent work. Mark verification modes honestly — an optimistic `AUTOMATED` label creates unverifiable work, and a lazy `HUMAN_REQUIRED` label hides work the agent should do.
+
 ### Scenario Index
 
-| Scenario ID | Priority | Scenario | Risk Addressed | Related Requirements | Verification Mode | Evidence Status |
-| --- | --- | --- | --- | --- | --- | --- |
+| Scenario ID | Priority | Scenario | Risk Addressed | Related Requirements | Verification Mode | Evidence Status | Owner (if human/external) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
 
-The index should show coverage and gaps without duplicating full prose.
+The index should show coverage, gaps, and the AI-complete horizon without duplicating full prose.
 
 ### Detail tiers
 
@@ -184,9 +193,17 @@ Completion rules:
 
 - Every applicable `MUST_PASS` and `REGRESSION` scenario must pass with scenario-specific evidence.
 - Package-level or suite-level green does not by itself pass any individual scenario.
-- Required human or external verification must either pass or remain explicitly gated.
+- Required human or external verification must either pass or remain explicitly gated with an owner and next action.
 - The verdict must not be stronger than the weakest applicable required scenario or unresolved gate.
 - Separate document readiness from implementation readiness.
+
+Terminal states for downstream goal runs — all three end a run successfully:
+
+- `DONE`: every required scenario passes.
+- `AI_COMPLETE`: every remaining required item is `HUMAN_REQUIRED`, `EXTERNAL_ENVIRONMENT`, `BLOCKED`, later_slice, or out_of_scope. Explicitly gated items are terminal for agents; more agent work cannot and must not substitute for the gate.
+- `BLOCKED_STOP`: missing access, unresolved decision, or an irreversible action is required.
+
+Evidence sufficiency applies at run time too: once a scenario has one qualifying evidence pointer, further evidence work on it is forbidden.
 
 ---
 
@@ -201,17 +218,21 @@ Source of truth:
 Scope:
 Non-goals:
 Human/external gates:
+AI-complete horizon: (automated-mode scenario IDs this goal can actually close)
+Human/external handoff: (item -> owner -> exact next action)
 Work packages:
 - WP-001: goal; scenarios; verification surface; exit evidence
 - WP-002: goal; scenarios; verification surface; exit evidence
 Split triggers:
 Verification classes/checks:
 Evaluator-visible evidence required:
-Stop/block conditions:
+Run budget: (default: 1 work package, ≤3 commits, 1 push per run; broadest checks exactly once, at the final gate; targeted checks during iteration)
+Convergence rules: (commits must move a scenario verdict or reduce a blocker count; never re-open passed scenarios; two iterations with no verdict change -> stop)
+Terminal states: DONE | AI_COMPLETE | BLOCKED_STOP (all are successful ends; emit handoff report and stop)
 Final verdict rule:
 ```
 
-The brief must support goal-mode evaluation: it should state measurable completion criteria, checks the downstream agent should run, constraints that must remain intact, and the exact evidence that must be surfaced in package checkpoints and the final verdict.
+The brief must support goal-mode evaluation in both directions: it states measurable completion criteria, the checks to run, and the constraints that must remain intact — and it makes stopping evaluable. A downstream evaluator reading only the handoff report must be able to confirm the terminal state without requesting more work. Re-evaluation of an unchanged state re-emits the same report; it is not a request for further improvement.
 
 ---
 
@@ -224,12 +245,14 @@ Planner challenge:
 - Are root causes, requirements, scenarios, and packages aligned?
 - Are packages too small, too broad, or crossing split triggers?
 - Are obvious low-risk scenarios demoted and high-risk scenarios given enough depth?
+- Is the AI-complete horizon honest — no optimistic `AUTOMATED`, no lazy `HUMAN_REQUIRED`?
 
 Evaluator challenge:
 
 - Can a downstream `/goal` evaluator decide completion from the surfaced evidence?
+- Can it also decide **termination**: distinguish `AI_COMPLETE` from unfinished work using only the handoff report?
 - Does every required scenario have direct evidence requirements?
-- Are proof boundaries, assumptions, human/external gates, and blocked items explicit?
+- Are proof boundaries, assumptions, human/external gates, and blocked items explicit, each with an owner?
 - Does the final verdict overclaim?
 
 Mechanical checks:
@@ -238,6 +261,8 @@ Mechanical checks:
 - Claim labels and execution statuses match §1 exactly.
 - Verification classes are defined once and referenced elsewhere.
 - The Goal Execution Brief is consistent with the scenario index, packages, and completion rules.
+- The brief contains the AI-complete horizon, run budget, convergence rules, and terminal states.
+- Every `HUMAN_REQUIRED` and `EXTERNAL_ENVIRONMENT` item has an owner and exact next action.
 
 ---
 
