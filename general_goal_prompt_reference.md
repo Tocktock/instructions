@@ -38,7 +38,7 @@ Done means:
 Terminal states — each is a terminal run exit:
 - DONE: all required scenarios pass.
 - AI_COMPLETE: every remaining required item is HUMAN_REQUIRED, EXTERNAL_ENVIRONMENT, BLOCKED, LATER_SLICE, or OUT_OF_SCOPE. This is a completion state because more agent work cannot close the remaining gates.
-- BLOCKED_STOP: missing access, unresolved decision, unfit package contract, or an irreversible/human decision is required. This is a clean stop, not a completion state.
+- BLOCKED_STOP: missing access, an unresolved human-owned decision, an unfit package contract, or an irreversible/human-authority decision is required. This is a clean stop, not a completion state. Ordinary technical or implementation choices are not blockers; resolve them through the autonomous decision rule below.
 On any terminal state: emit the handoff report — verdict table plus every remaining blocker with owner and exact next human action — and stop. The done-check counts only scenarios inside the AI-complete horizon; human/external scenarios are satisfied by an explicit gate entry, never by additional agent work.
 
 Run budget — hard limits:
@@ -52,11 +52,20 @@ Commit admission rule:
 - never re-open a passed scenario to strengthen its evidence
 - every new test cites the scenario ID it verifies
 
+Autonomous implementation and decision rule:
+- directly implement every required part that can be safely completed with the available repository, tools, evidence, and permissions; do not push routine implementation work or ordinary technical decisions back to the user
+- when a non-trivial implementation, design, or architecture decision is required, identify viable options and compare them across implementation difficulty, complexity, operational stability, maintainability, reversibility, delivery speed, and fit with the long-term product and architecture plan
+- create multiple decision-relevant personas — such as implementer, maintainer/architect, operations/SRE or security reviewer, tester, and product/domain owner — and have them independently challenge the options and confirm, qualify, or dissent from the preferred choice
+- synthesize the persona reviews and choose the best-balanced option. Persona agreement is advisory, not authority; the main agent owns the final decision, implementation, verification, and resulting trade-offs
+- prefer the smallest complete and reversible solution that satisfies the required scenarios. Do not add long-term complexity for speculative value, and do not choose short-term convenience when it creates disproportionate stability risk or structural debt
+- request human input only when the decision requires unavailable authority, credentials, destructive or irreversible action, legal/compliance judgment, security acceptance, or a business choice that cannot be responsibly inferred from the available evidence
+- record the options considered, trade-offs, selected rationale, persona conclusions or dissent, residual risks, and rollback or follow-up path in the evaluator-visible handoff
+
 Work style:
 1. Plan once upfront: restate objective, constraints, assumptions, human gates, scenario coverage, package boundaries, and the AI-complete horizon this run can actually close.
 2. Batch by default. Group scenarios by shared code path, subsystem, feature flow, root cause, or verification surface. A small slice may be one package.
 3. Split only when needed: irreversible/destructive action, security/auth/payments/data-retention boundary, unresolved decision, unknown root cause requiring investigation, human/external gate mid-flow, or verification that cannot run together.
-4. Use subagents or personas sparingly: one planning challenge for package boundaries, one adversarial reviewer for high-risk packages, one final evidence review. Their output is input, not authority; the main agent owns synthesis and verdicts.
+4. Use subagents or personas proportionally. The main agent decides routine implementation directly. For each non-trivial decision, select multiple relevant personas and obtain independent challenge and confirmation before choosing. Keep reviews bounded to planning, material decisions, high-risk packages, and the final evidence gate. Their output is input, not authority; the main agent owns synthesis, implementation, and verdicts.
 5. Execute one package as one coherent change-set, fixing shared root causes once. Then verify the package deeply, once.
 6. Prefer integration/UI checks that exercise the package behavior. Inspect sources and flow directly with search, file reads, diffs, and path:line references. Use short deterministic scripts only for small invariants, never as a substitute for flow analysis or real tests.
 7. On failure, fix and re-verify affected scenarios only. If unrelated failures recur, split adaptively at the fault line.
@@ -77,6 +86,21 @@ Final gate (runs once):
 Idempotent re-evaluation:
 If a new evaluation cycle finds repository and gate state unchanged since the last handoff report, re-emit that report and stop. Re-evaluation is not a request for more work.
 ```
+
+## Autonomous Implementation and Decision Discipline
+
+The agent owns implementable work from analysis through verification. A solvable technical choice must not be reclassified as a human blocker merely because several reasonable alternatives exist.
+
+For every non-trivial implementation, design, or architecture decision:
+
+1. Define the decision, constraints, must-pass behavior, and viable options.
+2. Compare the options using implementation difficulty, total complexity, stability, maintainability, reversibility, delivery cost, and long-term direction.
+3. Select multiple relevant personas and have each independently challenge the options from its own responsibility boundary. Typical personas include an implementer, maintainer or architect, operations/SRE or security reviewer, tester, and product/domain owner. Use only the personas that materially improve the decision.
+4. Resolve disagreements by returning to observed evidence, scenario requirements, and explicit trade-offs. Do not treat a majority vote or reviewer opinion as proof.
+5. Make and implement the final decision. Prefer the smallest complete, stable, and reversible option that preserves a credible path toward the long-term plan.
+6. Report the rationale, rejected alternatives, material dissent, residual risk, and rollback or migration path.
+
+Human escalation is reserved for authority-owned or externally gated choices: destructive or irreversible actions, unavailable access or credentials, legal/compliance decisions, security or business acceptance, and choices whose governing intent cannot be inferred from the available source material.
 
 ## Run Discipline (anti-loop)
 
@@ -104,13 +128,13 @@ Avoid both extremes:
 
 Embed planning and evaluation into the same goal run. Do not add a separate workflow layer.
 
-Use three heavy gates only:
+Use three heavy review gates only. Decision personas operate inside these gates and must not create an additional review loop:
 
-1. **Planning challenge:** Are scenarios missing? Are package boundaries too small or too large? Did any split trigger get ignored? Is the AI-complete horizon correct?
+1. **Planning challenge:** Are scenarios missing? Are package boundaries too small or too large? Did any split trigger get ignored? Is the AI-complete horizon correct? Which non-trivial decisions require persona-based option review?
 2. **High-risk package challenge:** For security, irreversible, external, or unknown-root-cause work, attack the design and verification plan before claiming progress.
 3. **Final evidence challenge:** Does each required scenario have direct evidence? Does the final verdict overclaim? Are human/external gates explicit with owners? This challenge runs once and acts only on verdict-changing findings.
 
-When actual subagents are unavailable or too costly, emulate these gates with concise internal multi-perspective review. Reviewer opinions are never proof; only observed evidence is proof.
+When actual subagents are unavailable or too costly, emulate the selected personas with concise internal multi-perspective review. Reviewer opinions are never proof; only observed evidence is proof. The main agent remains responsible for the final choice and must not escalate a resolvable technical decision merely because persona opinions differ.
 
 ## Evidence Rules
 
@@ -119,7 +143,3 @@ When actual subagents are unavailable or too costly, emulate these gates with co
 - Evidence should be pointers, not transcripts: command, test name, assertion, path:line, observed UI state, screenshot, artifact path, or citation.
 - Separate observed evidence from assumptions, judgment, recommendations, and human-required acceptance.
 - Evidence has a sufficiency ceiling: once a scenario has one qualifying pointer, further evidence work on it is forbidden.
-
-## Size Rule
-
-Keep the reusable goal prompt compact enough for goal mode. Put detailed specs and long scenario lists in attachments; the goal should reference them and require package-level execution plus scenario-level evidence, within the run budget.
